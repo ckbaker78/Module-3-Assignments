@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+failed=0
+
+while IFS= read -r -d '' file; do
+  if git show ":$file" | grep -nE '^(<<<<<<<|=======|>>>>>>>)' >/dev/null; then
+    echo "error: staged file contains Git conflict markers: $file" >&2
+    failed=1
+  fi
+
+  case "$file" in
+    *.ipynb)
+      if ! git show ":$file" | python3 -m json.tool >/dev/null; then
+        echo "error: staged notebook is invalid JSON: $file" >&2
+        failed=1
+      fi
+      ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ "$failed" -ne 0 ]; then
+  echo "Commit blocked. Resolve conflicts or fix invalid notebooks, then try again." >&2
+  exit 1
+fi
